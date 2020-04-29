@@ -6,7 +6,11 @@ HLT = 1
 LDI = 130
 PRN = 71
 MUL = 162
-
+ADD = 160
+POP = 70
+PUSH = 69
+CALL = 80
+RET = 17
 debugging = False
 
 
@@ -18,7 +22,22 @@ class CPU:
         self.ram = [0] * 256
         self.reg = [0] * 8
         self.pc = 0
+        self.ir = 0
+        self.mar = 0
+        self.mdr = 0
+        self.fl = 0
         self.running = False
+        self.branchtable = {}
+        self.branchtable[HLT] = self.hlt
+        self.branchtable[LDI] = self.ldi
+        self.branchtable[PRN] = self.prn
+        self.branchtable[MUL] = self.mul
+        self.branchtable[ADD] = self.add
+        self.branchtable[POP] = self.pop
+        self.branchtable[PUSH] = self.push
+        self.branchtable[CALL] = self.call
+        self.branchtable[RET] = self.ret
+        self.branchtable[ADD] = self.add
 
     def load(self, file):
         """Load a program into memory."""
@@ -38,7 +57,7 @@ class CPU:
                 program.append(x)
         f.close()
 
-        #program = [0b00000001]
+        # program = [0b00000001]
         for instruction in program:
             self.ram[address] = instruction
             address += 1
@@ -48,7 +67,13 @@ class CPU:
 
         if op == "ADD":
             self.reg[reg_a] += self.reg[reg_b]
-        # elif op == "SUB": etc
+        elif op == "SUB":
+            self.reg[reg_a] -= self.reg[reg_b]
+        elif op == "MUL":
+            self.reg[reg_a] *= self.reg[reg_b]
+        elif op == "DIV":
+            self.reg[reg_a] /= self.reg[reg_b]
+
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -79,32 +104,64 @@ class CPU:
 
         print()
 
+    def ldi(self):
+
+        self.reg[self.ram[self.pc + 1]] = self.ram[self.pc + 2]
+        self.pc += 3
+
+    def prn(self):
+        print(self.reg[self.ram[self.pc + 1]])
+        self.pc += 2
+
+    def mul(self):
+        self.alu('MUL', self.ram[self.pc+1], self.ram[self.pc + 2])
+        self.pc += 3
+
+    def add(self):
+        self.alu('ADD', self.ram[self.pc+1], self.ram[self.pc + 2])
+        self.pc += 3
+
+    def pop(self):
+        self.reg[self.ram[self.pc+1]] = self.ram[self.reg[7]]
+        self.reg[7] += 1
+        self.pc += 2
+
+    def push(self):
+        self.reg[7] -= 1
+        self.ram[self.reg[7]] = self.reg[self.ram[self.pc + 1]]
+        self.pc += 2
+
+    def call(self):
+        self.reg[7] += 1
+        self.ram[self.reg[7]] = self.pc + 2
+        self.pc = self.reg[self.ram[self.pc+1]]
+
+    def ret(self):
+        self.pc = self.ram[self.reg[7]]
+        self.ram[7] += 1
+
+    def hlt(self):
+        self.running = False
+
     def run(self):
+        # Handle power on state
+        for i in range(8):
+            if i < 7:
+                self.reg[i] = 0
+            else:
+                self.reg[i] = 0XF4
+        # start the program loop
         self.running = True
+
         while self.running == True:
-            command = self.ram[self.pc]
-            if debugging:
-                print(f'Command at address {self.pc} is {command}')
-            if command == HLT:
-                if debugging:
-                    print('halting')
-                self.running = False
-            elif command == LDI:
-                if debugging:
-                    print('LDI')
-                    print(
-                        f'Loading {self.ram[self.pc + 2]} into register {self.ram[self.pc + 1]}')
-                self.reg[self.ram[self.pc + 1]] = self.ram[self.pc + 2]
-                self.pc += 3
-            elif command == PRN:
-                print(self.reg[self.ram[self.pc + 1]])
-                self.pc += 2
-            elif command == MUL:
-                if debugging:
-                    print(
-                        f'Multiplying {self.reg[self.ram[self.pc + 1]]} by {self.reg[self.ram[self.pc + 2]]}')
-                self.reg[self.ram[self.pc + 1]] = self.reg[self.ram[self.pc + 1]
-                                                           ] * self.reg[self.ram[self.pc + 2]]
-                self.pc += 3
+            # set the intruction register to the current instruction
+            self.ir = self.ram[self.pc]
+            # Not really seeing how this will come in handy just yet but ive got the AA bits isolated for future use
+            bin_op = self.ir >> 6
+
+            if self.ir in self.branchtable:
+                self.branchtable[self.ir]()
             else:
                 print("Error!")
+                print(self.pc)
+                self.running = False
