@@ -7,10 +7,15 @@ LDI = 130
 PRN = 71
 MUL = 162
 ADD = 160
+CMP = 167
+JEQ = 85
+JNE = 86
 POP = 70
 PUSH = 69
 CALL = 80
 RET = 17
+JMP = 84
+
 debugging = False
 
 
@@ -25,7 +30,7 @@ class CPU:
         self.ir = 0
         self.mar = 0
         self.mdr = 0
-        self.fl = 0
+        self.fl = 0b00000000
         self.running = False
         self.branchtable = {}
         self.branchtable[HLT] = self.hlt
@@ -33,11 +38,14 @@ class CPU:
         self.branchtable[PRN] = self.prn
         self.branchtable[MUL] = self.mul
         self.branchtable[ADD] = self.add
+        self.branchtable[CMP] = self.cmp
+        self.branchtable[JEQ] = self.jeq
+        self.branchtable[JNE] = self.jne
         self.branchtable[POP] = self.pop
         self.branchtable[PUSH] = self.push
         self.branchtable[CALL] = self.call
         self.branchtable[RET] = self.ret
-        self.branchtable[ADD] = self.add
+        self.branchtable[JMP] = self.jmp
 
     def load(self, file):
         """Load a program into memory."""
@@ -73,7 +81,15 @@ class CPU:
             self.reg[reg_a] *= self.reg[reg_b]
         elif op == "DIV":
             self.reg[reg_a] /= self.reg[reg_b]
-
+        elif op == 'CMP':
+            #print(f'Comparing {self.reg[reg_a]} to {self.reg[reg_b]}')
+            if self.reg[reg_a] < self.reg[reg_b]:
+                self.fl = 0b100
+            elif self.reg[reg_a] > self.reg[reg_b]:
+                self.fl = 0b10
+            else:
+                self.fl = 0b1
+            # print(bin(self.fl))
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -121,6 +137,10 @@ class CPU:
         self.alu('ADD', self.ram[self.pc+1], self.ram[self.pc + 2])
         self.pc += 3
 
+    def cmp(self):
+        self.alu('CMP', self.ram[self.pc + 1], self.ram[self.pc+2])
+        self.pc += 3
+
     def pop(self):
         self.reg[self.ram[self.pc+1]] = self.ram[self.reg[7]]
         self.reg[7] += 1
@@ -140,6 +160,23 @@ class CPU:
         self.pc = self.ram[self.reg[7]]
         self.ram[7] += 1
 
+    def jmp(self):
+        self.pc = self.reg[self.ram[self.pc + 1]]
+
+    def jeq(self):
+
+        if self.fl == 0b1:
+            self.pc = self.reg[self.ram[self.pc + 1]]
+        else:
+            self.pc += 2
+
+    def jne(self):
+
+        if self.fl != 0b1:
+            self.pc = self.reg[self.ram[self.pc + 1]]
+        else:
+            self.pc += 2
+
     def hlt(self):
         self.running = False
 
@@ -156,6 +193,7 @@ class CPU:
         while self.running == True:
             # set the intruction register to the current instruction
             self.ir = self.ram[self.pc]
+            #print(f'current instruction: {self.ir} at {self.pc}')
             # Not really seeing how this will come in handy just yet but ive got the AA bits isolated for future use
             bin_op = self.ir >> 6
 
@@ -163,5 +201,8 @@ class CPU:
                 self.branchtable[self.ir]()
             else:
                 print("Error!")
-                print(self.pc)
+                print(self.ram[self.pc])
+                print(self.reg[0])
+                print(self.reg[1])
+                print(bin(self.fl))
                 self.running = False
